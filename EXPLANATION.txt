@@ -1,0 +1,324 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           COFFEE QUALITY DASHBOARD – DETAILED EXPLANATION FILE             ║
+║    Course: Exploratory Data Analysis  |  Instructor: Ali Hassan Sherazi    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+This file explains EVERY command used in the project and WHY each chart was
+chosen for this specific dataset. Read before your demo presentation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION A – filters.py (Data Loading & Cleaning)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. pd.read_csv(path)
+   WHY: Standard Pandas function to load CSV files into a DataFrame.
+        The dataset is provided as a CSV, so this is the correct loader.
+
+2. df.drop(columns=["Unnamed: 0"], errors="ignore")
+   WHY: When Pandas saves a DataFrame to CSV without specifying index=False,
+        it writes the row numbers as a column named "Unnamed: 0".
+        We drop it because it carries no analytical value.
+
+3. pd.to_datetime(df["Grading.Date"], errors="coerce")
+   WHY: Grading.Date is stored as a string (e.g., "April 4th, 2016").
+        Converting to datetime allows us to extract the year and build
+        time-series charts. errors="coerce" turns unparseable values to NaT
+        instead of crashing.
+
+4. df["Grading.Year"] = df["Grading.Date"].dt.year
+   WHY: We only need the year for trend charts; extracting it into its own
+        column makes groupby operations clean and fast.
+
+5. str.extract(r"(\d{4})")
+   WHY: Harvest.Year contains messy values like "2014/2015" or "14/15".
+        The regex (\d{4}) captures the first 4-digit year, giving us a
+        consistent integer we can use in the time slider filter.
+
+6. df[col].fillna(df[col].median())
+   WHY: Sensory scores (Aroma, Flavor, etc.) have occasional NaN entries.
+        We fill with the MEDIAN (not mean) because median is robust to
+        outliers. This keeps all rows usable without distorting distributions.
+
+7. df[col].fillna("Unknown")
+   WHY: Categorical columns like Variety and Color have missing strings.
+        Replacing with "Unknown" preserves the row while making the absence
+        of data explicit and visible in charts.
+
+8. df[df["Total.Cup.Points"] > 0]
+   WHY: A handful of rows have Total.Cup.Points == 0, which are data entry
+        errors (no coffee scores exactly zero). Removing them prevents them
+        from skewing the histogram and all average KPIs.
+
+9. apply_filters() function
+   WHY: All 8 sidebar filters feed into ONE function, which returns ONE
+        filtered DataFrame. Every chart then uses this same filtered df.
+        This guarantees the rubric requirement: "filters linked to ALL charts."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION B – charts.py (All 10 Charts + Bonus)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CHART 1 – PIE CHART (Processing Method Distribution)
+------------------------------------------------------
+COLUMN USED: Processing.Method (categorical)
+WHY THIS CHART: A pie chart is ideal for showing PROPORTIONAL COMPOSITION
+  of a whole. Here it shows what percentage of samples were processed by
+  Washed, Natural, Honey, etc. methods.
+WHY THIS COLUMN: Processing method is the primary post-harvest treatment
+  affecting coffee flavor. Knowing the distribution tells us if results are
+  skewed by one method.
+KEY COMMANDS:
+  ax.pie(..., autopct="%1.1f%%")  → shows percentage on each wedge
+  wedgeprops=dict(edgecolor=BG)   → adds thin border between slices for clarity
+  .head(6)                        → limits to top 6 methods to avoid clutter
+
+CHART 2 – HISTOGRAM (Total Cup Points Distribution)
+-----------------------------------------------------
+COLUMN USED: Total.Cup.Points (continuous numerical)
+WHY THIS CHART: A histogram shows the FREQUENCY DISTRIBUTION of a numerical
+  variable. It answers: "Are most coffees average, or is quality evenly spread?"
+WHY THIS COLUMN: Total Cup Points is the single most important variable –
+  it is the Q-grader's overall quality verdict. Understanding its distribution
+  is the first thing any analyst should do.
+KEY COMMANDS:
+  sns.histplot(..., kde=True)   → adds Kernel Density Estimate curve over bars
+  bins=30                       → 30 bins gives enough resolution for 1311 rows
+  ax.lines[0].set_color(ACCENT) → recolors the KDE line to our accent gold
+
+CHART 3 – LINE CHART (Avg Score Trend by Year)
+------------------------------------------------
+COLUMN USED: Grading.Year (time), Total.Cup.Points (value)
+WHY THIS CHART: A line chart is the STANDARD for time-series data. It shows
+  how average cup quality has changed year over year.
+WHY THIS COLUMN: If quality is improving, farms and processing are getting
+  better. If declining, there may be climate or supply-chain issues.
+KEY COMMANDS:
+  df.groupby("Grading.Year")["Total.Cup.Points"].mean() → aggregate to annual avg
+  ax.fill_between(...)   → shaded area below line adds visual depth
+  marker="o"             → circular markers highlight each data point
+
+CHART 4 – BAR CHART (Top 10 Countries by Avg Score)
+-----------------------------------------------------
+COLUMN USED: Country.of.Origin (categorical), Total.Cup.Points (value)
+WHY THIS CHART: A horizontal bar chart is optimal for RANKING discrete
+  categories where the label text is long (country names).
+WHY THIS COLUMN: Country of origin is the most impactful geographic variable.
+  Terroir (soil, altitude, climate) differs by country, so country-level
+  comparison is meaningful.
+KEY COMMANDS:
+  ax.barh(...)         → horizontal bars (better for long country name labels)
+  ax.invert_yaxis()    → puts highest-scoring country at top
+  ax.text(val + 0.05)  → value label printed right of each bar
+
+CHART 5 – SCATTER PLOT (Aroma vs Flavor)
+-----------------------------------------
+COLUMNS USED: Aroma, Flavor (both continuous), colored by Processing.Method
+WHY THIS CHART: A scatter plot shows the RELATIONSHIP between two continuous
+  variables. Aroma and Flavor are the two most commonly discussed sensory
+  attributes in coffee grading.
+WHY THESE COLUMNS: If Aroma and Flavor are strongly correlated, Q-graders
+  are consistent. Coloring by processing method reveals if one method
+  systematically produces better aroma.
+KEY COMMANDS:
+  ax.scatter(..., alpha=0.6)   → semi-transparent points prevent overplotting
+  loop over methods            → each processing method gets its own color
+  ax.legend()                  → shows color → method mapping
+
+CHART 6 – BOX PLOT (Sensory Score Distributions)
+--------------------------------------------------
+COLUMNS USED: Aroma, Flavor, Aftertaste, Acidity, Body, Balance
+WHY THIS CHART: A box plot shows MEDIAN, IQR, and OUTLIERS simultaneously.
+  Comparing multiple box plots side by side reveals which attributes have
+  higher variance or more outliers.
+WHY THESE COLUMNS: These are the 6 core Q-grader sensory scores. Comparing
+  their spreads answers: "Which attribute is most variable / hardest to grade?"
+KEY COMMANDS:
+  df[cols].melt()       → reshapes wide data to long format for seaborn
+  sns.boxplot()         → creates grouped boxes automatically from long format
+  flierprops            → styles outlier dots
+
+CHART 7 – HEATMAP (Correlation Matrix)
+----------------------------------------
+COLUMNS USED: All 10 numerical sensory + scoring columns
+WHY THIS CHART: A heatmap of correlations shows ALL pairwise relationships
+  at once. It is the most efficient way to understand feature relationships
+  in a dataset with many numerical columns.
+WHY THESE COLUMNS: With 10+ scoring columns, manually checking each pair
+  would be impractical. The heatmap reveals: Flavor-Aroma are highly
+  correlated, while Uniformity-Acidity are not.
+KEY COMMANDS:
+  df[cols].corr()        → Pandas built-in Pearson correlation matrix
+  sns.heatmap(annot=True)→ prints correlation values inside each cell
+  fmt=".2f"              → rounds to 2 decimal places for readability
+  cmap="YlOrBr"          → yellow-orange-brown palette matches coffee theme
+
+CHART 8 – AREA CHART (Cumulative Samples Graded)
+--------------------------------------------------
+COLUMN USED: Grading.Year (time), Count (aggregated)
+WHY THIS CHART: An area chart emphasises VOLUME and ACCUMULATION over time.
+  The filled area makes the growth in grading activity visually striking.
+WHY THIS COLUMN: Cumulative grading count shows how the coffee quality
+  evaluation industry has grown – more samples graded each year means the
+  dataset is becoming more representative.
+KEY COMMANDS:
+  .cumsum()              → computes running total
+  ax.fill_between(...)   → fills area under the line with color
+  ax.plot(...)           → draws the line edge on top of fill
+
+CHART 9 – COUNT PLOT (Bean Color Frequency)
+---------------------------------------------
+COLUMN USED: Color (categorical)
+WHY THIS CHART: A count plot is a bar chart where Seaborn automatically
+  counts occurrences. It is the simplest way to show CATEGORICAL FREQUENCY.
+WHY THIS COLUMN: Bean Color (Green, Blue-Green, Bluish-Green, etc.) is an
+  unusual feature in the dataset. Showing its frequency distribution reveals
+  data imbalance – if one color dominates, any color-based analysis must
+  account for this.
+KEY COMMANDS:
+  sns.countplot(order=order)  → sorts bars by frequency (most to least)
+  df["Color"].value_counts().index  → generates the sort order
+
+CHART 10 – VIOLIN PLOT (Flavor by Bean Color)
+-----------------------------------------------
+COLUMNS USED: Color (categorical x-axis), Flavor (numerical y-axis)
+WHY THIS CHART: A violin plot is a box plot enhanced with a KERNEL DENSITY
+  shape. It reveals whether the distribution is bimodal or skewed, which a
+  box plot alone cannot show.
+WHY THESE COLUMNS: Pairing Color with Flavor tests whether bean color
+  (a quality indicator) correlates with flavor score. If Blue-Green beans
+  have a higher, tighter distribution, that confirms color as a quality signal.
+KEY COMMANDS:
+  sns.violinplot(inner="quartile")  → draws quartile lines inside the violin
+  .head(4)                          → limits to 4 colors to prevent clutter
+
+BONUS – PAIR PLOT (Key Sensory Attributes)
+-------------------------------------------
+COLUMNS USED: Aroma, Flavor, Acidity, Body + hue = Processing.Method
+WHY THIS CHART: A pair plot creates a GRID of scatter plots and KDE diagonal
+  plots for all combinations of selected features. It gives a comprehensive
+  multi-dimensional overview in one image.
+WHY THESE COLUMNS: Aroma, Flavor, Acidity, Body are the "Big Four" in coffee
+  grading. Seeing all their pairwise relationships + color separation by
+  processing method in one view is extremely informative.
+KEY COMMANDS:
+  sns.pairplot(hue="Processing.Method")  → colors each point by method
+  diag_kind="kde"                         → KDE on diagonal instead of histogram
+  plot_kws=dict(alpha=0.5, s=15)         → smaller, semi-transparent points
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION C – app.py (Streamlit Dashboard)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+st.set_page_config(layout="wide")
+  WHY: Wide layout uses the full browser width, essential for a multi-chart
+       dashboard. Narrow layout would make charts tiny and unreadable.
+
+@st.cache_data
+  WHY: Caches the loaded DataFrame so Streamlit does not re-read the CSV
+       every time a filter changes. Makes the dashboard fast and responsive.
+
+st.session_state["reset"]
+  WHY: Streamlit re-runs the entire script on every interaction. Using
+       session_state to track a "reset" flag is the correct Streamlit pattern
+       for resetting widgets to defaults.
+
+st.rerun()
+  WHY: Forces an immediate full re-run after setting reset=True so all
+       filter widgets re-render with default values.
+
+st.columns(2)
+  WHY: Splits the page into 2 equal columns. Placing charts side by side
+       uses horizontal space efficiently and is the standard dashboard layout.
+
+st.pyplot(fig)
+  WHY: Renders a Matplotlib/Seaborn figure inside Streamlit. This is the
+       bridge between Python charts and the web interface.
+
+st.expander()
+  WHY: Wraps the pair plot (slow to render) and raw data table in collapsible
+       sections. Users who don't need them won't wait for them to load.
+
+st.markdown(..., unsafe_allow_html=True)
+  WHY: Allows injecting custom HTML/CSS. Required for KPI cards, banner,
+       and chart wrapper divs that go beyond Streamlit's default styling.
+
+matplotlib.use("Agg") in charts.py
+  WHY: Streamlit runs as a web server with no display. "Agg" is a
+       non-interactive backend that renders to memory instead of a screen.
+       Without this, Matplotlib would crash trying to open a GUI window.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION D – Marks Breakdown Strategy (How to Score 100/100)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[10] Correct use of dataset (no renaming)
+  ✅ File saved as "arabica_data_cleaned.csv" – exact name, not changed.
+
+[15] Data cleaning and preprocessing (Pandas)
+  ✅ Dropped unnamed column, converted datetime, extracted year,
+     filled NaN with median/Unknown, removed zero-score rows.
+     All done in filters.py with clear comments.
+
+[25] Variety and correctness of charts
+  ✅ All 10 required chart types implemented:
+     Pie, Histogram, Line, Bar, Scatter, Box, Heatmap, Area, Count, Violin.
+  ✅ BONUS: Pair Plot added for extra credit.
+
+[10] Chart quality (titles, labels, colors)
+  ✅ Every chart has: ax.set_title(), ax.set_xlabel(), ax.set_ylabel().
+  ✅ Legends added where applicable (scatter, pair plot).
+  ✅ Consistent espresso-brown color scheme via PALETTE list.
+
+[20] Filter functionality (interactive & linked)
+  ✅ 8 filters implemented (exceeds requirement of 6):
+     Date range, Country, Processing Method, Variety, Color,
+     Cup Score range, Altitude range, Text search.
+  ✅ Reset button clears all filters.
+  ✅ All filters feed into apply_filters() → all charts update together.
+
+[10] Dashboard design and professionalism
+  ✅ Dark roast theme with Playfair Display + Lato typography.
+  ✅ KPI summary cards at top.
+  ✅ Grouped charts into logical sections with section headers.
+  ✅ Sidebar navigation with styled filters.
+  ✅ Hover animations on KPI cards and chart wrappers.
+
+[5] Code quality and project structure
+  ✅ Modular files: app.py, charts.py, filters.py, requirements.txt.
+  ✅ Every function documented with WHY comments.
+  ✅ Proper folder structure with data/ and notebooks/ directories.
+
+[5] README and documentation
+  ✅ README.md has: setup instructions, project structure, key insights,
+     feature table.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION E – Demo Presentation Script (5–10 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. [0:00–1:00] Introduction
+   "This dashboard analyses 1,311 Arabica coffee samples graded by
+   certified Q-graders on six sensory attributes. I built it with Python,
+   Pandas, Seaborn, Matplotlib, and Streamlit."
+
+2. [1:00–2:00] KPI Cards
+   "At the top, six KPI cards give an instant snapshot: total records,
+   average score, highest and lowest scores, average aroma, and country count."
+
+3. [2:00–4:00] Charts walkthrough (briefly explain each section)
+   - Distribution: "The histogram shows scores cluster at 82–85."
+   - Categorical: "Ethiopia leads all countries in average score."
+   - Time trends: "Grading activity has grown significantly since 2012."
+   - Relationships: "Aroma and Flavor are strongly correlated."
+   - Advanced: "The heatmap reveals Flavor, Aftertaste, and Balance
+     are the most inter-correlated sensory attributes."
+
+4. [4:00–5:30] Live Filter Demo
+   - Apply Country filter → "Ethiopia" → all 10 charts update instantly.
+   - Add Processing Method → "Natural/Dry" → notice score distribution shifts.
+   - Use text search → type "Ethiopia" → same result via search.
+   - Click Reset → everything goes back to default.
+
+5. [5:30–6:00] Closing
+   "The dashboard is fully modular – adding new features to the dataset
+   requires only adding them to filters.py and one new chart function."
